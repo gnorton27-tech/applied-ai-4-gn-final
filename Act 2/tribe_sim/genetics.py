@@ -68,7 +68,13 @@ class GeneticAlgorithm:
         child = Gatherer(genes=child_genes)
         return child
     
-    def mutate(self, gatherer):
+    def mutate(self, mutation_rate=0.05, mutation_scale=0.1):
+        for i in range(len(self.dna)):
+            if random.random() < mutation_rate:
+                self.dna[i] += random.gauss(0, mutation_scale)
+                self.dna[i] = max(-1.0, min(1.0, self.dna[i]))
+        return self.dna
+
         # STUDENT ASSIGNMENT 2: Implement a better mutation strategy
         # Current version just randomly flips genes - very crude!
         #
