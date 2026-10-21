@@ -69,9 +69,6 @@ class SkeletonOptimizationAgent(BaselineAgent):
         queue_info = observation['order_queue']
         employee_info = observation['employees']
 
-        # Track layout performance every 100 steps
-        if observation['time'][0] % 100 == 0:
-            self.track_layout_performance()
         
         action = {
             'staffing_action': self._get_naive_staffing_action(financial_state, employee_info),
@@ -86,28 +83,29 @@ class SkeletonOptimizationAgent(BaselineAgent):
     
     def _get_naive_staffing_action(self, financial_state, employee_info) -> int:
         """
-        Improved staffing strategy based on current workforce and profit.
-        Avoids random hiring/firing decisions.
+        Profit-aware warehouse staffing strategy.
+        Balances employee coverage with operating costs.
         """
 
-        current_profit = financial_state[0]
+        current_profit = float(financial_state[0])
         num_employees = int(np.sum(employee_info[:, 0] > 0))
-        has_manager = np.any(employee_info[:, 5] == 1)
+        has_manager = bool(np.any(employee_info[:, 5] == 1))
 
-        # Make sure the warehouse has enough workers
+        # Ensure enough workers for warehouse operations
         if num_employees < 5:
             return 1  # Hire worker
 
-        # Make sure there is a manager for layout optimization
-        if not has_manager:
-            return 3  # Hire manager
+        # Ensure a manager is available for layout decisions
+            if not has_manager:
+                return 3  # Hire manager
 
-        # Limit additional hiring to control operating costs
-        if current_profit > 1000 and num_employees < 7:
-            return 1  # Hire worker
+        # Expand staffing when the warehouse is profitable
+            if current_profit > 2000 and num_employees < 7:
+                return 1  # Hire worker
 
-        # Avoid unnecessary staffing changes
-        return 0
+            # Avoid unnecessary hiring when profits are low
+                return 0  # Maintain current staffing
+
     def _get_naive_layout_action(self, current_timestep) -> list:
         """
         WEEK 1 STEP 1: Layout optimization - students should improve this!
@@ -319,40 +317,39 @@ class SkeletonOptimizationAgent(BaselineAgent):
             return [source_idx, target_idx]
 
         return None
+    
     def _get_naive_order_assignments(self, queue_info, employee_info) -> list:
         """
-        Improved order assignment based on order priority/value.
+        Optimized order assignment strategy.
+        Prioritizes valuable orders and distributes work
+        across available employees.
         """
 
         assignments = [0] * 20
 
-        num_employees = int(np.sum(employee_info[:, 0] > 0))
-        active_indices = np.where(queue_info[:, 0] > 0)[0]
-        active_orders = queue_info[active_indices]
-        if num_employees == 0 or len(active_orders) == 0:
+        # Identify active employees and waiting orders
+        active_employees = np.where(employee_info[:, 0] > 0)[0]
+        active_orders = np.where(queue_info[:, 0] > 0)[0]
+
+        if len(active_employees) == 0 or len(active_orders) == 0:
             return assignments
 
-        # Prioritize higher-value orders first
-        order_values = active_orders[:, 1]
-        order_priorities = sorted(
-            range(len(active_orders)),
-            key=lambda i: order_values[i],
+        # Rank orders by value, highest first
+        sorted_orders = sorted(
+            active_orders,
+            key=lambda i: queue_info[i, 1],
             reverse=True
         )
 
-        # Assign priority orders across available employees
-        assignments_made = 0
+        # Assign each employee to one priority order
+        for employee_idx, order_idx in zip(active_employees, sorted_orders):
+            if order_idx >= len(assignments):
+                continue
 
-        for order_idx in order_priorities:
-            if assignments_made >= min(num_employees, 8):
-                break
-
-            employee_idx = (assignments_made % num_employees) + 1
-            original_order_idx = active_indices[order_idx]
-            assignments[original_order_idx] = employee_idx  
-            assignments_made += 1
+            assignments[order_idx] = int(employee_idx) + 1
 
         return assignments
+
     def track_layout_performance(self):
         """
         Performance analysis for greedy layout optimization algorithms.
